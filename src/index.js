@@ -72,18 +72,21 @@ class Majo extends EventEmitter {
      */
     this.files = {}
 
-    await Promise.all(
+    const loadedFiles = await Promise.all(
       flattened.map(stats => {
         const { absPath } = stats
-        return fs.readFile(absPath).then(contents => {
-          const file = { contents, stats, path: absPath }
-          if (typeof this.files[stats.path] !== 'undefined') {
-            console.warn('majo has encountered duplicate relative path and has overwritten initial one due duplicate sources for: ' + stats.path)
-          }
-          this.files[stats.path] = file
-        })
+        return fs.readFile(absPath).then(contents => ({
+          contents, stats, path: absPath
+        }))
       })
     )
+
+    loadedFiles.forEach(file => {
+      if (typeof this.files[file.stats.path] !== 'undefined') {
+        console.warn('majo has encountered duplicate relative path and has overwritten initial one due duplicate sources for: ' + file.stats.path)
+      }
+      this.files[file.stats.path] = file
+    })
 
     await new Wares().use(this.middlewares).run(this)
 
