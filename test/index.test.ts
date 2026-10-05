@@ -65,19 +65,24 @@ test('rename', async () => {
 })
 
 
-test('multiple sources commit duplicate paths in configured order', async () => {
+test('multiple sources preserve order and source base on rename', async () => {
+  const firstDir = path.join(__dirname, 'fixture/doubleSource')
+  const secondDir = path.join(__dirname, 'fixture/stats')
   const stream = majo()
 
-  stream.source('**/*.md', {
-    baseDir: path.join(__dirname, 'fixture/doubleSource')
-  })
-  stream.source('**/*.md', {
-    baseDir: path.join(__dirname, 'fixture/stats')
-  })
+  stream
+    .source('**/*.md', { baseDir: firstDir })
+    .source('**/*.md', { baseDir: secondDir })
+    .use(ctx => {
+      ctx.rename('bar.md', 'renamed/bar.md')
+    })
 
   await stream.process()
 
-  expect(stream.files['bar.md']).toBeDefined()
+  expect(stream.files['renamed/bar.md']).toBeDefined()
+  expect(stream.file('renamed/bar.md').path).toBe(
+    path.join(firstDir, 'renamed/bar.md')
+  )
   expect(stream.files['foo.md']).toBeDefined()
   expect(stream.fileContents('foo.md')).toBe('')
 })
