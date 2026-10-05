@@ -73,6 +73,9 @@ export class Majo {
     patterns: string[]
     dotFiles: boolean
   }>
+  sourceBaseDirs: {
+    [filename: string]: string
+  }
   files: {
     [filename: string]: File
   }
@@ -82,6 +85,7 @@ export class Majo {
     this.middlewares = []
     this.meta = {}
     this.sourceEntries = []
+    this.sourceBaseDirs = {}
     this.files = {}
   }
 
@@ -144,6 +148,7 @@ export class Majo {
         const absolutePath = path.resolve(baseDir, entry.path)
         return readFile(absolutePath).then(contents => ({
           relativePath: entry.path as string,
+          sourceBaseDir: baseDir,
           file: {
             contents,
             stats: entry.stats as fs.Stats,
@@ -153,7 +158,7 @@ export class Majo {
       })
     )
 
-    loadedFiles.forEach(({ relativePath, file }) => {
+    loadedFiles.forEach(({ relativePath, sourceBaseDir, file }) => {
       if (typeof this.files[relativePath] !== 'undefined') {
         console.warn(
           `[majo] Duplicate relative path "${relativePath}" overwritten by a later source`
@@ -161,6 +166,7 @@ export class Majo {
       }
       // Commit reads in configured source order, not completion order.
       this.files[relativePath] = file
+      this.sourceBaseDirs[relativePath] = sourceBaseDir
     })
 
     await new Wares().use(this.middlewares).run(this)
@@ -265,6 +271,7 @@ export class Majo {
    */
   deleteFile(relativePath: string) {
     delete this.files[relativePath]
+    delete this.sourceBaseDirs[relativePath]
     return this
   }
 
@@ -290,11 +297,13 @@ export class Majo {
       return this
     }
     const file = this.files[fromPath]
+    const sourceBaseDir = this.sourceBaseDirs[fromPath] || this.baseDir
     this.createFile(toPath, {
-      path: file.path,
+      path: path.resolve(sourceBaseDir, toPath),
       stats: file.stats,
       contents: file.contents
     })
+    this.sourceBaseDirs[toPath] = sourceBaseDir
     this.deleteFile(fromPath)
     return this
   }
