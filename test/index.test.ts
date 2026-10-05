@@ -1,23 +1,20 @@
 import path from 'path'
-import * as buble from 'buble'
-import majo from '../src'
+import { majo, glob, remove } from '../src'
 
 test('main', async () => {
-  await majo()
+  const outputDir = path.join(__dirname, 'output/main')
+  await remove(outputDir)
+  const stream = await majo()
     .source('**', { baseDir: path.join(__dirname, 'fixture/source') })
-    .dest('./output', { baseDir: __dirname })
+    .dest('./output/main', { baseDir: __dirname })
+  expect(
+    await glob('**/*', { cwd: outputDir }).then(result => result.sort())
+  ).toEqual(stream.fileList)
 })
 
 test('middleware', async () => {
   const stream = majo()
     .source('**', { baseDir: path.join(__dirname, 'fixture/source') })
-    .use(({ files }) => {
-      for (const filename in files) {
-        if (/\.js$/.test(filename)) {
-          files[filename].contents = Buffer.from(buble.transform(files[filename].contents.toString()).code)
-        }
-      }
-    })
     .use(({ files }) => {
       const contents = files['tmp.js'].contents.toString()
       files['tmp.js'].contents = Buffer.from(contents.replace(`'a'`, `'aaa'`))
@@ -25,7 +22,7 @@ test('middleware', async () => {
 
   await stream.process()
 
-  expect(stream.fileContents('tmp.js')).toMatch(`var a = function () { return 'aaa'; }`)
+  expect(stream.fileContents('tmp.js')).toMatch(`const a = () => 'aaa'`)
 })
 
 test('filter', async () => {
@@ -67,25 +64,20 @@ test('rename', async () => {
   expect(stream.fileList).toEqual(['b/c.txt'])
 })
 
-test('double source', async () => {
+
+test('multiple sources commit duplicate paths in configured order', async () => {
   const stream = majo()
 
-  stream.source('**/*.md', { baseDir: path.join(__dirname, 'fixture/doubleSource') })
-  stream.source('**/*.md', { baseDir: path.join(__dirname, 'fixture/stats') })
+  stream.source('**/*.md', {
+    baseDir: path.join(__dirname, 'fixture/doubleSource')
+  })
+  stream.source('**/*.md', {
+    baseDir: path.join(__dirname, 'fixture/stats')
+  })
 
   await stream.process()
 
   expect(stream.files['bar.md']).toBeDefined()
   expect(stream.files['foo.md']).toBeDefined()
-})
-
-test.skip('duplicates not overwritten with double source', async () => {
-  const stream = majo()
-
-  stream.source('**/foo.md', { baseDir: path.join(__dirname, 'fixture/doubleSource') })
-  stream.source('**/foo.md', { baseDir: path.join(__dirname, 'fixture/stats') })
-
-  await stream.process()
-
-  // foo from different dirs
+  expect(stream.fileContents('foo.md')).toBe('')
 })
