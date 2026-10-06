@@ -86,3 +86,22 @@ test('multiple sources preserve order and source base on rename', async () => {
   expect(stream.files['foo.md']).toBeDefined()
   expect(stream.fileContents('foo.md')).toBe('')
 })
+
+test('later sources keep an earlier onWrite hook when omitted', async () => {
+  const outputDir = path.join(__dirname, 'output/multipleSourceOnWrite')
+  const written: string[] = []
+
+  await remove(outputDir)
+
+  await majo()
+    .source('**/*.md', {
+      baseDir: path.join(__dirname, 'fixture/doubleSource'),
+      onWrite(relativePath) {
+        written.push(relativePath)
+      }
+    })
+    .source('**/*.md', { baseDir: path.join(__dirname, 'fixture/stats') })
+    .dest('./output/multipleSourceOnWrite', { baseDir: __dirname })
+
+  expect(written.sort()).toEqual(['bar.md', 'foo.md'])
+})
