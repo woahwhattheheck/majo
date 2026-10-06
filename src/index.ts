@@ -105,7 +105,9 @@ export class Majo {
     this.baseDir = resolvedBaseDir
     this.sourcePatterns = normalizedPatterns
     this.dotFiles = dotFiles
-    this.onWrite = onWrite
+    if (onWrite !== undefined) {
+      this.onWrite = onWrite
+    }
     this.sourceEntries.push({
       baseDir: resolvedBaseDir,
       patterns: normalizedPatterns,
