@@ -76,6 +76,8 @@ export class Majo {
   sourceBaseDirs: {
     [filename: string]: string
   }
+  /** Paths loaded from disk in the previous successful scan. */
+  private sourceFilePaths: Set<string>
   files: {
     [filename: string]: File
   }
@@ -85,6 +87,7 @@ export class Majo {
     this.middlewares = []
     this.meta = {}
     this.sourceEntries = []
+    this.sourceFilePaths = new Set()
     // Relative file paths come from glob results and can include reserved
     // object keys such as "__proto__". Treat all names as ordinary files.
     this.sourceBaseDirs = Object.create(null)
@@ -162,6 +165,15 @@ export class Majo {
       })
     )
 
+    // A second process() is a fresh disk snapshot. Retire only paths loaded
+    // by the previous scan, leaving manually created files untouched. Delay
+    // this mutation until every new read succeeds so failures retain state.
+    for (const relativePath of this.sourceFilePaths) {
+      delete this.files[relativePath]
+      delete this.sourceBaseDirs[relativePath]
+    }
+    this.sourceFilePaths.clear()
+
     loadedFiles.forEach(({ relativePath, sourceBaseDir, file }) => {
       if (typeof this.files[relativePath] !== 'undefined') {
         console.warn(
@@ -171,6 +183,7 @@ export class Majo {
       // Commit reads in configured source order, not completion order.
       this.files[relativePath] = file
       this.sourceBaseDirs[relativePath] = sourceBaseDir
+      this.sourceFilePaths.add(relativePath)
     })
 
     await new Wares().use(this.middlewares).run(this)
@@ -276,6 +289,7 @@ export class Majo {
   deleteFile(relativePath: string) {
     delete this.files[relativePath]
     delete this.sourceBaseDirs[relativePath]
+    this.sourceFilePaths.delete(relativePath)
     return this
   }
 
@@ -285,6 +299,9 @@ export class Majo {
    * @param file
    */
   createFile(relativePath: string, file: File) {
+    // An explicit file write supersedes any previous disk-source ownership.
+    this.sourceFilePaths.delete(relativePath)
+    delete this.sourceBaseDirs[relativePath]
     this.files[relativePath] = file
     return this
   }
@@ -297,9 +314,10 @@ export class Majo {
   }
 
   rename(fromPath: string, toPath: string) {
-    if (!this.baseDir) {
+    if (!this.baseDir || fromPath === toPath) {
       return this
     }
+    const diskOwned = this.sourceFilePaths.has(fromPath)
     const file = this.files[fromPath]
     const sourceBaseDir = this.sourceBaseDirs[fromPath] || this.baseDir
     this.createFile(toPath, {
@@ -309,6 +327,8 @@ export class Majo {
     })
     this.sourceBaseDirs[toPath] = sourceBaseDir
     this.deleteFile(fromPath)
+    // A renamed disk-source output must also expire on the next fresh scan.
+    if (diskOwned) this.sourceFilePaths.add(toPath)
     return this
   }
 }

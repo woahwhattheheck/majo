@@ -1,5 +1,6 @@
 import path from 'path'
-import { majo, glob, remove } from '../src'
+import fs from 'fs'
+import { majo, glob, remove, ensureDir } from '../src'
 
 test('main', async () => {
   const outputDir = path.join(__dirname, 'output/main')
@@ -121,4 +122,47 @@ test('later sources keep an earlier onWrite hook when omitted', async () => {
     .dest('./output/multipleSourceOnWrite', { baseDir: __dirname })
 
   expect(written.sort()).toEqual(['bar.md', 'foo.md'])
+})
+
+
+test('repeated process reloads disk sources but preserves manually created records', async () => {
+  const sourceDir = path.join(__dirname, 'output/source-reload')
+  await remove(sourceDir)
+  await ensureDir(sourceDir)
+  const original = path.join(sourceDir, 'previous.txt')
+  const replacement = path.join(sourceDir, 'replacement.txt')
+  try {
+    fs.writeFileSync(original, 'previous disk contents')
+    const stream = majo().source('*.txt', { baseDir: sourceDir })
+    await stream.process()
+    expect(stream.fileContents('previous.txt')).toBe('previous disk contents')
+    // Explicit additions are not implicit snapshots from glob().
+    stream.createFile('manual.generated', {
+      path: path.join(sourceDir, 'manual.generated'),
+      contents: Buffer.from('keep manual contents'),
+      stats: fs.statSync(original)
+    })
+    fs.unlinkSync(original)
+    fs.writeFileSync(replacement, 'replacement disk contents')
+    await stream.process()
+    expect(stream.fileList).toEqual(['manual.generated', 'replacement.txt'])
+    expect(stream.fileContents('replacement.txt')).toBe('replacement disk contents')
+    expect(stream.fileContents('manual.generated')).toBe('keep manual contents')
+    expect(stream.sourceBaseDirs['previous.txt']).toBeUndefined()
+    expect(stream.sourceBaseDirs['replacement.txt']).toBe(sourceDir)
+  } finally {
+    await remove(sourceDir)
+  }
+})
+
+test('renaming a source to itself never deletes its contents or origin', async () => {
+  const sourceDir = path.join(__dirname, 'fixture/stats')
+  const stream = majo().source('**/*.md', { baseDir: sourceDir })
+  await stream.process()
+  const previous = stream.fileContents('foo.md')
+  const origin = stream.sourceBaseDirs['foo.md']
+  stream.rename('foo.md', 'foo.md')
+  expect(stream.fileList).toEqual(['foo.md'])
+  expect(stream.fileContents('foo.md')).toBe(previous)
+  expect(stream.sourceBaseDirs['foo.md']).toBe(origin)
 })
