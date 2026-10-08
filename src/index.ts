@@ -85,8 +85,10 @@ export class Majo {
     this.middlewares = []
     this.meta = {}
     this.sourceEntries = []
-    this.sourceBaseDirs = {}
-    this.files = {}
+    // Relative file paths come from glob results and can include reserved
+    // object keys such as "__proto__". Treat all names as ordinary files.
+    this.sourceBaseDirs = Object.create(null)
+    this.files = Object.create(null)
   }
 
   /**
