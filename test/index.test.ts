@@ -87,6 +87,23 @@ test('multiple sources preserve order and source base on rename', async () => {
   expect(stream.fileContents('foo.md')).toBe('')
 })
 
+test('reserved filenames survive multiple source glob reads', async () => {
+  const firstDir = path.join(__dirname, 'fixture/doubleSource')
+  const secondDir = path.join(__dirname, 'fixture/stats')
+  const stream = majo()
+    .source('**', { baseDir: firstDir })
+    .source('**/*.md', { baseDir: secondDir })
+
+  await stream.process()
+
+  expect(Object.getPrototypeOf(stream.files)).toBeNull()
+  expect(Object.prototype.hasOwnProperty.call(stream.files, '__proto__')).toBe(true)
+  expect(stream.fileList).toContain('__proto__')
+  expect(stream.fileContents('__proto__')).toBe('reserved filename\n')
+  expect(stream.sourceBaseDirs['__proto__']).toBe(firstDir)
+  expect(stream.fileContents('foo.md')).toBe('')
+})
+
 test('later sources keep an earlier onWrite hook when omitted', async () => {
   const outputDir = path.join(__dirname, 'output/multipleSourceOnWrite')
   const written: string[] = []
