@@ -184,7 +184,7 @@ export class Majo {
     return this.use(context => {
       for (const relativePath in context.files) {
         if (!fn(relativePath, context.files[relativePath])) {
-          delete context.files[relativePath]
+          context.deleteFile(relativePath)
         }
       }
     })
